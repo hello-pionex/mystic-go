@@ -368,7 +368,7 @@ func (invoker *Invoker) Request() (*http.Response, error) {
 	}
 
 	if invoker.client == nil {
-		invoker.client = http.DefaultClient
+		invoker.client = DefaultHttpClient
 	}
 
 	var cancelFunc func()
