@@ -91,6 +91,10 @@ func (invokeErr *InvokeError) Timeout() bool {
 	return invokeErr.IsTimeout
 }
 
+func (invokeErr *InvokeError) Unwrap() error {
+	return invokeErr.Err
+}
+
 func New() *Invoker {
 	in := &Invoker{}
 	in.logger = in.debugLogger
