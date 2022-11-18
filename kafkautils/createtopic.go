@@ -124,7 +124,7 @@ func CreateTopicWithSimpleCfg(cfg *CreateTopicSimpleCfg) ([]kafka.Partition, err
 	if cfg.RetentionBytes != nil {
 		entries = append(entries, kafka.ConfigEntry{
 			ConfigName:  "retention.bytes",
-			ConfigValue: fmt.Sprintf("%d", cfg.RetentionBytes), // 保存时间
+			ConfigValue: fmt.Sprintf("%d", *cfg.RetentionBytes), // 保存时间
 		})
 	}
 
