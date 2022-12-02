@@ -260,10 +260,14 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 				httpCtx.Writer.Header().Set("X-Api-Code", resp.(*Response).Mcode)
 				httpCtx.Writer.Header().Set("X-Api-Message", resp.(*Response).Message)
 			} else {
-				resp = NewOkResponse(data)
+				if _, ok := data.(NopResponse); !ok {
+					resp = NewOkResponse(data)
+				}
 			}
 
-			httpCtx.JSON(status, resp)
+			if resp != nil {
+				httpCtx.JSON(status, resp)
+			}
 
 			if logMode > 0 {
 				l := log.WithFields(logrus.Fields{
