@@ -336,8 +336,9 @@ func (invoker *Invoker) CheckStatus(check func(rsp *http.Response) error) *Invok
 	return invoker
 }
 
-func (invoker *Invoker) Logger(f func(time.Duration, *http.Request, *http.Response, error)) {
+func (invoker *Invoker) Logger(f func(time.Duration, *http.Request, *http.Response, error)) *Invoker {
 	invoker.logger = f
+	return invoker
 }
 
 func (invoker *Invoker) Context(ctx context.Context) *Invoker {
