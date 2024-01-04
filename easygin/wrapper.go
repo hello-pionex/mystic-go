@@ -108,10 +108,9 @@ type WrapOption struct {
 	defaultErrorStatus *int
 	logMode            *int
 	onRecover          func(interface{}) error
-	requestWeight      int
+	requestWeight      *int
 	convertError       func(err error) code.Error
-
-	errorCodeFieldName string
+	errorCodeFieldName *string
 }
 
 func NewWrapOption() *WrapOption {
@@ -149,11 +148,23 @@ func (opt *WrapOption) ConvertError(fn func(error) code.Error) *WrapOption {
 }
 
 func (opt *WrapOption) ErrorCodeFieldName(fieldName string) *WrapOption {
-	opt.errorCodeFieldName = fieldName
+	opt.errorCodeFieldName = &fieldName
 	return opt
 }
 
 func (opt *WrapOption) Merge(from *WrapOption) *WrapOption {
+	if from.log != nil {
+		opt.log = from.log
+	}
+
+	if from.maxPendingRequests != nil {
+		opt.maxPendingRequests = from.maxPendingRequests
+	}
+
+	if from.defaultErrorStatus != nil {
+		opt.defaultErrorStatus = from.defaultErrorStatus
+	}
+
 	if from.logMode != nil {
 		opt.logMode = from.logMode
 	}
@@ -162,12 +173,16 @@ func (opt *WrapOption) Merge(from *WrapOption) *WrapOption {
 		opt.onRecover = from.onRecover
 	}
 
-	if from.maxPendingRequests != nil {
-		opt.maxPendingRequests = from.maxPendingRequests
+	if from.requestWeight != nil {
+		opt.requestWeight = from.requestWeight
 	}
 
-	if from.log != nil {
-		opt.log = nil
+	if from.convertError != nil {
+		opt.convertError = from.convertError
+	}
+
+	if from.errorCodeFieldName != nil {
+		opt.errorCodeFieldName = from.errorCodeFieldName
 	}
 
 	return opt
@@ -199,16 +214,17 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 	}
 
 	requestWeight := 1
-	if opt.requestWeight != 0 {
-		requestWeight = opt.requestWeight
+	if opt.requestWeight != nil {
+		requestWeight = *opt.requestWeight
 	}
 
 	logMode := LogTypeError | LogTypeSuccess
 	if opt.logMode != nil {
 		logMode = *opt.logMode
 	}
-	if opt.errorCodeFieldName == "" {
-		opt.errorCodeFieldName = ErrorCodeFieldNameMcode
+	errorCodeFieldName := ErrorCodeFieldNameMcode
+	if opt.errorCodeFieldName != nil {
+		errorCodeFieldName = *opt.errorCodeFieldName
 	}
 
 	onError := opt.convertError
@@ -268,11 +284,11 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 			// 错误的返回
 			if retErr != nil {
 				errRsp := NewErrorResponse(retErr)
-				switch opt.errorCodeFieldName {
-				case ErrorCodeFieldNameMcode:
-					errRsp.Mcode = retErr.Mcode()
-				default:
+				switch errorCodeFieldName {
+				case ErrorCodeFieldNameCode:
 					errRsp.Code = retErr.Mcode()
+				default:
+					errRsp.Mcode = retErr.Mcode()
 				}
 
 				status = defaultErrorStatus
