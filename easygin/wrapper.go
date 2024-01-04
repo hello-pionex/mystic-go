@@ -18,7 +18,8 @@ import (
 
 type Response struct {
 	Result    bool        `json:"result"`
-	Mcode     string      `json:"code,omitempty"`
+	Mcode     string      `json:"mcode,omitempty"`
+	Code      string      `json:"code,omitempty"`
 	Message   string      `json:"message,omitempty"`
 	Data      interface{} `json:"data,omitempty"`
 	Timestamp int64       `json:"timestamp"`
@@ -28,9 +29,8 @@ type NopResponse interface {
 	NopResponse()
 }
 
-func NewErrorResponse(code code.Error) *Response {
+func NewErrorResponse(code code.Error, errFieldName string) *Response {
 	return &Response{
-		Mcode:     code.Mcode(),
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 		Message:   code.Message(),
 	}
@@ -97,6 +97,11 @@ const (
 	LogTypeError
 )
 
+const (
+	ErrorCodeFieldNameMcode = "mcode"
+	ErrorCodeFieldNameCode  = "code"
+)
+
 type WrapOption struct {
 	log                *logrus.Entry
 	maxPendingRequests *int
@@ -105,6 +110,8 @@ type WrapOption struct {
 	onRecover          func(interface{}) error
 	requestWeight      int
 	convertError       func(err error) code.Error
+
+	errorCodeFieldName string
 }
 
 func NewWrapOption() *WrapOption {
@@ -138,6 +145,11 @@ func (opt *WrapOption) OnRecoverError(fn func(interface{}) error) *WrapOption {
 
 func (opt *WrapOption) ConvertError(fn func(error) code.Error) *WrapOption {
 	opt.convertError = fn
+	return opt
+}
+
+func (opt *WrapOption) ErrorCodeFieldName(fieldName string) *WrapOption {
+	opt.errorCodeFieldName = fieldName
 	return opt
 }
 
@@ -194,6 +206,9 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 	logMode := LogTypeError | LogTypeSuccess
 	if opt.logMode != nil {
 		logMode = *opt.logMode
+	}
+	if opt.errorCodeFieldName == "" {
+		opt.errorCodeFieldName = ErrorCodeFieldNameMcode
 	}
 
 	onError := opt.convertError
@@ -252,11 +267,20 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 			status := 200
 			// 错误的返回
 			if retErr != nil {
-				resp = NewErrorResponse(retErr)
+				errRsp := NewErrorResponse(retErr, opt.errorCodeFieldName)
+				switch opt.errorCodeFieldName {
+				case ErrorCodeFieldNameMcode:
+					errRsp.Mcode = retErr.Mcode()
+				default:
+					errRsp.Code = retErr.Mcode()
+				}
+
 				status = defaultErrorStatus
 				if statusError, ok := retErr.(StatusError); ok {
 					status = statusError.HttpStatus()
 				}
+				resp = errRsp
+
 				httpCtx.Writer.Header().Set("X-Api-Code", resp.(*Response).Mcode)
 				httpCtx.Writer.Header().Set("X-Api-Message", resp.(*Response).Message)
 			} else {
