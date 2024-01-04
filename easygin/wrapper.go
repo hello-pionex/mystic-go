@@ -18,7 +18,8 @@ import (
 
 type Response struct {
 	Result    bool        `json:"result"`
-	Mcode     string      `json:"code,omitempty"`
+	Mcode     string      `json:"mcode,omitempty"`
+	Code      string      `json:"code,omitempty"`
 	Message   string      `json:"message,omitempty"`
 	Data      interface{} `json:"data,omitempty"`
 	Timestamp int64       `json:"timestamp"`
@@ -30,7 +31,6 @@ type NopResponse interface {
 
 func NewErrorResponse(code code.Error) *Response {
 	return &Response{
-		Mcode:     code.Mcode(),
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 		Message:   code.Message(),
 	}
@@ -97,14 +97,20 @@ const (
 	LogTypeError
 )
 
+const (
+	ErrorCodeFieldNameMcode = "mcode"
+	ErrorCodeFieldNameCode  = "code"
+)
+
 type WrapOption struct {
 	log                *logrus.Entry
 	maxPendingRequests *int
 	defaultErrorStatus *int
 	logMode            *int
 	onRecover          func(interface{}) error
-	requestWeight      int
+	requestWeight      *int
 	convertError       func(err error) code.Error
+	errorCodeFieldName *string
 }
 
 func NewWrapOption() *WrapOption {
@@ -141,7 +147,24 @@ func (opt *WrapOption) ConvertError(fn func(error) code.Error) *WrapOption {
 	return opt
 }
 
+func (opt *WrapOption) ErrorCodeFieldName(fieldName string) *WrapOption {
+	opt.errorCodeFieldName = &fieldName
+	return opt
+}
+
 func (opt *WrapOption) Merge(from *WrapOption) *WrapOption {
+	if from.log != nil {
+		opt.log = from.log
+	}
+
+	if from.maxPendingRequests != nil {
+		opt.maxPendingRequests = from.maxPendingRequests
+	}
+
+	if from.defaultErrorStatus != nil {
+		opt.defaultErrorStatus = from.defaultErrorStatus
+	}
+
 	if from.logMode != nil {
 		opt.logMode = from.logMode
 	}
@@ -150,12 +173,16 @@ func (opt *WrapOption) Merge(from *WrapOption) *WrapOption {
 		opt.onRecover = from.onRecover
 	}
 
-	if from.maxPendingRequests != nil {
-		opt.maxPendingRequests = from.maxPendingRequests
+	if from.requestWeight != nil {
+		opt.requestWeight = from.requestWeight
 	}
 
-	if from.log != nil {
-		opt.log = nil
+	if from.convertError != nil {
+		opt.convertError = from.convertError
+	}
+
+	if from.errorCodeFieldName != nil {
+		opt.errorCodeFieldName = from.errorCodeFieldName
 	}
 
 	return opt
@@ -187,13 +214,17 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 	}
 
 	requestWeight := 1
-	if opt.requestWeight != 0 {
-		requestWeight = opt.requestWeight
+	if opt.requestWeight != nil {
+		requestWeight = *opt.requestWeight
 	}
 
 	logMode := LogTypeError | LogTypeSuccess
 	if opt.logMode != nil {
 		logMode = *opt.logMode
+	}
+	errorCodeFieldName := ErrorCodeFieldNameMcode
+	if opt.errorCodeFieldName != nil {
+		errorCodeFieldName = *opt.errorCodeFieldName
 	}
 
 	onError := opt.convertError
@@ -252,11 +283,20 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 			status := 200
 			// 错误的返回
 			if retErr != nil {
-				resp = NewErrorResponse(retErr)
+				errRsp := NewErrorResponse(retErr)
+				switch errorCodeFieldName {
+				case ErrorCodeFieldNameCode:
+					errRsp.Code = retErr.Mcode()
+				default:
+					errRsp.Mcode = retErr.Mcode()
+				}
+
 				status = defaultErrorStatus
 				if statusError, ok := retErr.(StatusError); ok {
 					status = statusError.HttpStatus()
 				}
+				resp = errRsp
+
 				httpCtx.Writer.Header().Set("X-Api-Code", resp.(*Response).Mcode)
 				httpCtx.Writer.Header().Set("X-Api-Message", resp.(*Response).Message)
 			} else {
