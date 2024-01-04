@@ -29,7 +29,7 @@ type NopResponse interface {
 	NopResponse()
 }
 
-func NewErrorResponse(code code.Error, errFieldName string) *Response {
+func NewErrorResponse(code code.Error) *Response {
 	return &Response{
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 		Message:   code.Message(),
@@ -267,7 +267,7 @@ func (wrapper *Wrapper) Wrap(f WrappedFunc, regPath string, options ...*WrapOpti
 			status := 200
 			// 错误的返回
 			if retErr != nil {
-				errRsp := NewErrorResponse(retErr, opt.errorCodeFieldName)
+				errRsp := NewErrorResponse(retErr)
 				switch opt.errorCodeFieldName {
 				case ErrorCodeFieldNameMcode:
 					errRsp.Mcode = retErr.Mcode()
